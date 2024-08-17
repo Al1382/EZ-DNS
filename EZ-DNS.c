@@ -1,6 +1,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <winsock2.h>
+#include <iphlpapi.h>
+#include <ws2tcpip.h>
+#include <windows.h>
+
+#pragma comment(lib, "iphlpapi.lib")
+#pragma comment(lib, "ws2_32.lib")
+
+#define MAX_ADAPTERS 10
 
 #define RESET   "\033[0m"
 #define RED     "\033[31m"
@@ -8,6 +17,45 @@
 #define YELLOW  "\033[33m"
 #define BLUE    "\033[34m"
 
+
+void listConnectedAdapters(char adapterNames[][256], int *adapterCount) {
+    ULONG outBufLen = 0;
+    DWORD dwRetVal = 0;
+
+    PIP_ADAPTER_ADDRESSES pAddresses = NULL;
+    if (GetAdaptersAddresses(AF_UNSPEC, GAA_FLAG_INCLUDE_PREFIX, NULL, NULL, &outBufLen) == ERROR_BUFFER_OVERFLOW) {
+        pAddresses = (IP_ADAPTER_ADDRESSES *)malloc(outBufLen);
+        if (pAddresses == NULL) {
+            printf("Memory allocation failed for IP_ADAPTER_ADDRESSES struct\n");
+            return;
+        }
+    } else {
+        printf("Initial call to GetAdaptersAddresses failed\n");
+        return;
+    }
+
+    if ((dwRetVal = GetAdaptersAddresses(AF_UNSPEC, GAA_FLAG_INCLUDE_PREFIX, NULL, pAddresses, &outBufLen)) == NO_ERROR) {
+        PIP_ADAPTER_ADDRESSES pCurrAddresses = pAddresses;
+        *adapterCount = 0;
+        while (pCurrAddresses && *adapterCount < MAX_ADAPTERS) {
+            char adapterName[256];
+            wcstombs(adapterName, pCurrAddresses->FriendlyName, sizeof(adapterName));
+
+            if (strstr(adapterName, "Ethernet") != NULL || strstr(adapterName, "Wi-Fi") != NULL) {
+                strcpy(adapterNames[*adapterCount], adapterName);
+                (*adapterCount)++;
+            }
+
+            pCurrAddresses = pCurrAddresses->Next;
+        }
+    } else {
+        printf("GetAdaptersAddresses failed with error: %d\n", dwRetVal);
+    }
+
+    if (pAddresses) {
+        free(pAddresses);
+    }
+}
 
 void flush_dns() {
 
@@ -25,71 +73,41 @@ void flush_dns() {
     }
 }
 
-void executer(char *dnsServer1, char *dnsServer2) {
 
+void executer(char *dnsServer1, char *dnsServer2, char adapterNames[][256], int adapterCount) {
     system("cls");
 
     FILE *pf;
-    
-    char WiFi1[256];
-    char WiFi2[256];
-    char Lan1[256];
-    char Lan2[256];
 
-    // Construct the command strings
-    sprintf(WiFi1, "netsh interface ipv4 set dnsservers \"Wi-Fi\" static %s primary", dnsServer1);
-    sprintf(WiFi2, "netsh interface ipv4 add dnsservers \"Wi-Fi\" %s index=2", dnsServer2);
+    char command[512];
 
-    sprintf(Lan1, "netsh interface ipv4 set dnsservers \"Ethernet\" static %s primary", dnsServer1);
-    sprintf(Lan2, "netsh interface ipv4 add dnsservers \"Ethernet\" %s index=2", dnsServer2);
-  
-    // Execute the commands for Wi-Fi
-    printf(YELLOW "\nSetting Wi-Fi primary DNS: \n" RESET);
-    pf = popen(WiFi1, "r");
-    if (pf == NULL) {
-        perror("popen failed for WiFi1");
-        printf(RED "Error! \n" RESET);
-    } else {
-        pclose(pf);
-        printf(GREEN "Done! \n" RESET);
+    for (int i = 0; i < adapterCount; i++) {
+        // Construct the command strings for the current adapter
+        sprintf(command, "netsh interface ipv4 set dnsservers \"%s\" static %s primary", adapterNames[i], dnsServer1);
+        printf(YELLOW "\nSetting %s primary DNS: \n" RESET, adapterNames[i]);
+        pf = popen(command, "r");
+        if (pf == NULL) {
+            perror("popen failed");
+            printf(RED "Error!\n" RESET);
+        } else {
+            pclose(pf);
+            printf(GREEN "Done!\n" RESET);
+        }
+
+        sprintf(command, "netsh interface ipv4 add dnsservers \"%s\" %s index=2", adapterNames[i], dnsServer2);
+        printf(YELLOW "\nSetting %s secondary DNS: \n" RESET, adapterNames[i]);
+        pf = popen(command, "r");
+        if (pf == NULL) {
+            perror("popen failed");
+            printf(RED "Error!\n" RESET);
+        } else {
+            pclose(pf);
+            printf(GREEN "Done!\n" RESET);
+        }
     }
 
-    printf(YELLOW "\nSetting Wi-Fi secondary DNS: \n" RESET);
-    pf = popen(WiFi2, "r");
-    if (pf == NULL) {
-        perror("popen failed for WiFi2");
-        printf(RED "Error! \n" RESET);
-    } else {
-        pclose(pf);
-        printf(GREEN "Done! \n" RESET);
-    }
-
-    // Execute the commands for Ethernet
-    printf(YELLOW "\nSetting Ethernet primary DNS: \n" RESET);
-    pf = popen(Lan1, "r");
-    if (pf == NULL) {
-        perror("popen failed for Lan1");
-        printf(RED "Error! \n" RESET);
-    } else {
-        pclose(pf);
-        printf(GREEN "Done! \n" RESET);
-    }
-
-    printf(YELLOW "\nSetting Ethernet secondary DNS: \n" RESET);
-    pf = popen(Lan2, "r");
-    if (pf == NULL) {
-        perror("popen failed for Lan2");
-        printf(RED "Error! \n" RESET);
-    } else {
-        pclose(pf);
-        printf(GREEN "Done! \n" RESET);
-    }
-
-    // Flush DNS
     flush_dns();
-
 }
-
 
 
 void remove_dns() {
@@ -125,38 +143,30 @@ void remove_dns() {
 
 }
 
-void show_current_dns() {
+void show_current_dns(char adapterNames[][256], int adapterCount) {
 
     system("cls");
 
     FILE *pf;
+    char command[512];
 
-    // Display current DNS settings for Ethernet
-    printf(YELLOW "\nCurrent DNS settings for Ethernet:\n" RESET);
-    pf = popen("netsh interface ipv4 show dnsservers \"Ethernet\"", "r");
-    if (pf) {
-        char buffer[256];
-        while (fgets(buffer, sizeof(buffer), pf) != NULL) {
-            printf("%s", buffer);
+    for (int i = 0; i < adapterCount; i++) {
+        // Construct the command strings for the current adapter
+        printf(YELLOW "\nCurrent DNS settings for %s:\n" RESET, adapterNames[i]);
+        sprintf(command, "netsh interface ipv4 show dnsservers \"%s\"", adapterNames[i]);
+        pf = popen(command, "r");
+        if (pf) {
+            char buffer[256];
+            while (fgets(buffer, sizeof(buffer), pf) != NULL) {
+                printf("%s", buffer);
+            }
+            pclose(pf);
+        } else {
+            perror("popen failed for show DNS");
         }
-        pclose(pf);
-    } else {
-        perror("popen failed for show Ethernet DNS");
-    }
-
-    // Display current DNS settings for Wi-Fi
-    printf(YELLOW "\nCurrent DNS settings for Wi-Fi:\n" RESET);
-    pf = popen("netsh interface ipv4 show dnsservers \"Wi-Fi\"", "r");
-    if (pf) {
-        char buffer[256];
-        while (fgets(buffer, sizeof(buffer), pf) != NULL) {
-            printf("%s", buffer);
-        }
-        pclose(pf);
-    } else {
-        perror("popen failed for show Wi-Fi DNS");
     }
 }
+
 
 void check_current_dns() {
     FILE *pf;
@@ -217,6 +227,12 @@ void check_current_dns() {
 
 
 int main() {
+
+    char adapterNames[MAX_ADAPTERS][256];
+    int adapterCount = 0;
+
+    listConnectedAdapters(adapterNames, &adapterCount);
+
     char *Electro1 = "78.157.42.100";
     char *Electro2 = "78.157.42.101";
     char *Radar1 = "10.202.10.10";
@@ -266,42 +282,44 @@ start:
         goto start;
     }
 
+    //    executer(list[mode +1 ][0], list[mode +1 ][1])
+
     switch (mode) {
         case 1:
-            executer(Electro1, Electro2);
+            executer(Electro1, Electro2, adapterNames, adapterCount);
             break;
         case 2:
-            executer(Radar1, Radar2);
+            executer(Radar1, Radar2, adapterNames, adapterCount);
             break;
         case 3:
-            executer(Shecan1, Shecan2);
+            executer(Shecan1, Shecan2, adapterNames, adapterCount);
             break;
         case 4:
-            executer(FourZeroThree1, FourZeroThree2);
+            executer(FourZeroThree1, FourZeroThree2, adapterNames, adapterCount);
             break;
         case 5:
-            executer(Cloudflare1, Cloudflare2);
+            executer(Cloudflare1, Cloudflare2, adapterNames, adapterCount);
             break;
         case 6:
-            executer(Verisign1, Verisign2);
+            executer(Verisign1, Verisign2, adapterNames, adapterCount);
             break;
         case 7:
-            executer(Yandex1, Yandex2);
+            executer(Yandex1, Yandex2, adapterNames, adapterCount);
             break;
         case 8:
-            executer(Google1, Google2);
+            executer(Google1, Google2, adapterNames, adapterCount);
             break;
         case 9:
-            executer(ShelterOne1, ShelterOne2);
+            executer(ShelterOne1, ShelterOne2, adapterNames, adapterCount);
             break;
         case 10:
-            executer(ShelterTwo1, ShelterTwo2);
+            executer(ShelterTwo1, ShelterTwo2, adapterNames, adapterCount);
             break;
         case 11:
             remove_dns();
             break;
         case 12:
-            show_current_dns();
+            show_current_dns(adapterNames, adapterCount);
             break;
         default:
             printf(RED "\nPlease select your number among the options\n" RESET);
