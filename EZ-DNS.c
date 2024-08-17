@@ -110,35 +110,31 @@ void executer(char *dnsServer1, char *dnsServer2, char adapterNames[][256], int 
 }
 
 
-void remove_dns() {
+void remove_dns(char adapterNames[][256], int adapterCount) {
 
-    system("cls");
+    system("cls");  // Clear the console screen (Windows-specific)
 
     FILE *pf;
+    char command[512];
 
-    // Remove DNS servers for Wi-Fi
-    printf(YELLOW "\nRemoving Wi-Fi DNS: \n" RESET);
-    pf = popen("netsh interface ipv4 delete dnsservers \"Wi-Fi\" all > NUL", "r");
-    if (pf == NULL) {
-        perror("popen failed for remove Wi-Fi");
-        printf(RED "Error! \n" RESET);
-    } else {
-        pclose(pf);
-        printf(GREEN "Done! \n" RESET);
+    for (int i = 0; i < adapterCount; i++) {
+        printf(YELLOW "\nRemoving DNS for adapter: %s\n" RESET, adapterNames[i]);
+
+        // Construct the netsh command to remove DNS servers for the current adapter
+        sprintf(command, "netsh interface ipv4 delete dnsservers \"%s\" all > NUL", adapterNames[i]);
+
+        pf = popen(command, "r");
+        if (pf == NULL) {
+            perror(RED "popen failed for remove DNS" RESET);
+            printf(RED "Error removing DNS for adapter: %s\n" RESET, adapterNames[i]);
+        } else {
+            // DNS removal was attempted; you can add further output handling here if needed
+            pclose(pf);
+            printf(GREEN "DNS removed for adapter: %s\n" RESET, adapterNames[i]);
+        }
     }
 
-    // Remove DNS servers for Ethernet
-    printf(YELLOW "\nRemoving Ethernet DNS: \n" RESET);
-    pf = popen("netsh interface ipv4 delete dnsservers \"Ethernet\" all > NUL", "r");
-    if (pf == NULL) {
-        perror("popen failed for remove Ethernet");
-        printf(RED "Error! \n" RESET);
-    } else {
-        pclose(pf);
-        printf(GREEN "Done! \n" RESET);
-    }
-
-    // Flush DNS
+    // Flush DNS to ensure the changes take effect
     flush_dns();
 
 }
@@ -228,6 +224,8 @@ void check_current_dns() {
 
 int main() {
 
+start:
+
     char adapterNames[MAX_ADAPTERS][256];
     int adapterCount = 0;
 
@@ -255,7 +253,6 @@ int main() {
     char *ShelterTwo2 = "91.92.253.197";
     int mode;
 
-start:
     system("cls"); // Clear screen (for Windows, use "clear" for Linux/macOS)
 
     printf(BLUE "~\"*^=.~\"*^- EZ-DNS -^*\"~.=^*\"~\n\n" RESET);
@@ -316,7 +313,7 @@ start:
             executer(ShelterTwo1, ShelterTwo2, adapterNames, adapterCount);
             break;
         case 11:
-            remove_dns();
+            remove_dns(adapterNames, adapterCount);
             break;
         case 12:
             show_current_dns(adapterNames, adapterCount);
