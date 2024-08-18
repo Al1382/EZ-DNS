@@ -25,12 +25,12 @@ jobs:
 
     - name: Verify executable
       run: |
-        if exist EZ-DNS.exe (
-          echo "Build successful: EZ-DNS.exe exists."
-        ) else (
-          echo "Build failed: EZ-DNS.exe not found."
+        if (Test-Path -Path "EZ-DNS.exe") {
+          Write-Host "Build successful: EZ-DNS.exe exists."
+        } else {
+          Write-Host "Build failed: EZ-DNS.exe not found."
           exit 1
-        )
+        }
 
     - name: Store Build Artifacts
       uses: actions/upload-artifact@v2
