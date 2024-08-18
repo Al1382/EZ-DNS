@@ -12,9 +12,28 @@ jobs:
     runs-on: windows-latest
 
     steps:
-    - uses: actions/checkout@v1
+    - name: Checkout code
+      uses: actions/checkout@v2
 
-    - name: make
-      run: gcc EZ-DNS.c resource.o -lws2_32 -liphlpapi -o EZ-DNS.exe
-    - name: check executable
-      run: bash -c "[[ -x EZ-DNS ]]"
+    - name: Install GCC
+      run: |
+        choco install mingw
+
+    - name: Build executable
+      run: |
+        gcc EZ-DNS.c resource.o -lws2_32 -liphlpapi -o EZ-DNS.exe
+
+    - name: Verify executable
+      run: |
+        if exist EZ-DNS.exe (
+          echo "Build successful: EZ-DNS.exe exists."
+        ) else (
+          echo "Build failed: EZ-DNS.exe not found."
+          exit 1
+        )
+
+    - name: Store Build Artifacts
+      uses: actions/upload-artifact@v2
+      with:
+        name: EZ-DNS-executable
+        path: EZ-DNS.exe
