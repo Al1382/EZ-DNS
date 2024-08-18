@@ -1,0 +1,20 @@
+name: EZ-DNS 
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v1
+
+    - name: make
+      run: gcc EZ-DNS.c resource.o -lws2_32 -liphlpapi -o EZ-DNS(v0.4).exe
+    - name: check executable
+      run: bash -c "[[ -x EZ-DNS(v0.4) ]]"
