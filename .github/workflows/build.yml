@@ -17,4 +17,4 @@ jobs:
     - name: make
       run: gcc EZ-DNS.c resource.o -lws2_32 -liphlpapi -o EZ-DNS.exe
     - name: check executable
-      run: bash -c "[[ -x EZ-DNS(v0.4) ]]"
+      run: bash -c "[[ -x EZ-DNS ]]"
